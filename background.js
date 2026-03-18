@@ -1,3 +1,14 @@
+function getHostname(tab) {
+  if (!tab.url || !tab.url.startsWith('http')) {
+    return null;
+  }
+  try {
+    return new URL(tab.url).hostname;
+  } catch (e) {
+    return null;
+  }
+}
+
 function getTabKey(tab) {
   if (!tab.url || !tab.url.startsWith('http')) {
     return '\uffff';
@@ -44,5 +55,37 @@ async function sortTabs() {
     }
   }
 }
+
+async function closeTabsByHostname(info, tab) {
+  const targetHostname = getHostname(tab);
+  if (!targetHostname) return;
+
+  const tabs = await browser.tabs.query({ currentWindow: true });
+  const tabsToClose = tabs
+    .filter(t => getHostname(t) === targetHostname)
+    .map(t => t.id);
+
+  if (info.menuItemId === 'close-all') {
+    await browser.tabs.remove(tabsToClose);
+  } else if (info.menuItemId === 'close-others') {
+    const currentTabId = tab.id;
+    const otherTabs = tabsToClose.filter(id => id !== currentTabId);
+    await browser.tabs.remove(otherTabs);
+  }
+}
+
+browser.contextMenus.create({
+  id: 'close-all',
+  title: 'Close all tabs from this website',
+  contexts: ['tab']
+});
+
+browser.contextMenus.create({
+  id: 'close-others',
+  title: 'Close other tabs from this website',
+  contexts: ['tab']
+});
+
+browser.contextMenus.onClicked.addListener(closeTabsByHostname);
 
 browser.action.onClicked.addListener(sortTabs);
