@@ -1,3 +1,149 @@
+const SITE_NAMES = [
+  'youtube', 'www.youtube', 'youtu.be',
+  'facebook', 'www.facebook', 'fb.com',
+  'twitter', 'www.twitter', 'x.com', 'www.x.com',
+  'reddit', 'www.reddit', 'old.reddit',
+  'instagram', 'www.instagram',
+  'linkedin', 'www.linkedin',
+  'github', 'www.github',
+  'stackoverflow', 'www.stackoverflow',
+  'stackexchange', 'www.stackexchange',
+  'medium', 'www.medium',
+  'quora', 'www.quora',
+  'wikipedia', 'www.wikipedia',
+  'amazon', 'www.amazon',
+  'netflix', 'www.netflix',
+  'twitch', 'www.twitch',
+  'discord', 'www.discord',
+  'slack', 'www.slack',
+  'notion', 'www.notion',
+  'figma', 'www.figma',
+  'jira', 'www.jira',
+  'gitlab', 'www.gitlab',
+  'bitbucket', 'www.bitbucket',
+  'dev.to', 'www.dev.to',
+  'hackernews', 'news.ycombinator',
+  'producthunt', 'www.producthunt',
+  'craigslist', 'www.craigslist',
+  'ebay', 'www.ebay',
+  'spotify', 'open.spotify',
+  'soundcloud', 'www.soundcloud',
+  'vimeo', 'www.vimeo',
+  'dribbble', 'www.dribbble',
+  'behance', 'www.behance',
+  'codepen', 'www.codepen',
+  'replit', 'www.replit',
+  'glitch', 'www.glitch',
+  'jsfiddle', 'www.jsfiddle',
+  'stackblitz', 'www.stackblitz'
+];
+
+const TITLE_SEPARATORS = [
+  ' - ', ' : ', ' | ', ' — ', ' – ', ' :: ', ' /// ',
+  ' on ', ' - ', ': ', '| '
+];
+
+let apiKey = null;
+let embeddingCache = new Map();
+
+async function getApiKey() {
+  if (apiKey) return apiKey;
+  const stored = await browser.storage.local.get('googleApiKey');
+  if (!stored.googleApiKey) {
+    throw new Error('API key not configured. Please set up your Google AI API key in settings.');
+  }
+  apiKey = stored.googleApiKey;
+  return apiKey;
+}
+
+async function getEmbedding(text) {
+  const cacheKey = text.toLowerCase().trim();
+  
+  // Check in-memory cache first
+  if (embeddingCache.has(cacheKey)) {
+    return embeddingCache.get(cacheKey);
+  }
+
+  // Check persistent storage
+  const stored = await browser.storage.local.get('embedding_' + cacheKey);
+  if (stored['embedding_' + cacheKey]) {
+    const cached = stored['embedding_' + cacheKey];
+    embeddingCache.set(cacheKey, cached);
+    return cached;
+  }
+
+  const key = await getApiKey();
+  
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1/models/gemini-embedding-001:embedContent?key=${key}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'models/gemini-embedding-001',
+        content: {
+          parts: [{ text: text }]
+        }
+      })
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error?.message || 'Failed to get embedding');
+  }
+
+  const data = await response.json();
+  const embedding = data.embedding.values;
+  
+  embeddingCache.set(cacheKey, embedding);
+  
+  // Persist to storage
+  await browser.storage.local.set({ ['embedding_' + cacheKey]: embedding });
+  
+  return embedding;
+}
+
+function cleanTitle(title) {
+  if (!title) return '';
+  
+  let cleaned = title.toLowerCase().trim();
+  
+  for (const sep of TITLE_SEPARATORS) {
+    const idx = cleaned.lastIndexOf(sep);
+    if (idx > 5) {
+      cleaned = cleaned.substring(0, idx).trim();
+    }
+  }
+  
+  const words = cleaned.split(/\s+/);
+  const filtered = words.filter(word => {
+    const domainWord = word.replace(/[^a-z0-9]/g, '');
+    return !SITE_NAMES.includes(domainWord) && 
+           !SITE_NAMES.includes('www.' + domainWord);
+  });
+  
+  cleaned = filtered.join(' ');
+  
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  
+  return cleaned;
+}
+
+function cosineSimilarity(a, b) {
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
 function getHostname(tab) {
   if (!tab.url || !tab.url.startsWith('http')) {
     return null;
@@ -9,7 +155,33 @@ function getHostname(tab) {
   }
 }
 
-function getTabKey(tab) {
+function getDomainKey(tab) {
+  if (!tab.url || !tab.url.startsWith('http')) {
+    return '\uffff';
+  }
+
+  try {
+    const url = new URL(tab.url);
+    const hostname = url.hostname;
+    const parts = hostname.split('.');
+    
+    let domain;
+    
+    if (parts.length >= 2) {
+      domain = parts.slice(-2).join('.');
+    } else {
+      domain = hostname;
+    }
+
+    const path = url.pathname + url.search;
+    
+    return `${domain}\0${path}`;
+  } catch (e) {
+    return '\uffff';
+  }
+}
+
+function getSubdomainKey(tab) {
   if (!tab.url || !tab.url.startsWith('http')) {
     return '\uffff';
   }
@@ -37,23 +209,48 @@ function getTabKey(tab) {
   }
 }
 
-async function sortTabs() {
+async function sortTabsByDomain() {
   const tabs = await browser.tabs.query({ currentWindow: true });
   
   const sortableTabs = tabs.map((tab, index) => ({
     tab,
     index,
-    key: getTabKey(tab)
+    key: getDomainKey(tab)
   }));
 
   sortableTabs.sort((a, b) => a.key.localeCompare(b.key));
 
+  let movedCount = 0;
   for (let i = 0; i < sortableTabs.length; i++) {
     const targetTab = sortableTabs[i].tab;
     if (targetTab.index !== i) {
       await browser.tabs.move(targetTab.id, { index: i });
+      movedCount++;
     }
   }
+  return movedCount;
+}
+
+async function sortTabsBySubdomain() {
+  const tabs = await browser.tabs.query({ currentWindow: true });
+  
+  const sortableTabs = tabs.map((tab, index) => ({
+    tab,
+    index,
+    key: getSubdomainKey(tab)
+  }));
+
+  sortableTabs.sort((a, b) => a.key.localeCompare(b.key));
+
+  let movedCount = 0;
+  for (let i = 0; i < sortableTabs.length; i++) {
+    const targetTab = sortableTabs[i].tab;
+    if (targetTab.index !== i) {
+      await browser.tabs.move(targetTab.id, { index: i });
+      movedCount++;
+    }
+  }
+  return movedCount;
 }
 
 async function closeTabsByHostname(info, tab) {
@@ -74,6 +271,91 @@ async function closeTabsByHostname(info, tab) {
   }
 }
 
+async function sortBySimilarity(sourceTabId, method, threshold) {
+  const tabs = await browser.tabs.query({ currentWindow: true });
+  const sourceTab = tabs.find(t => t.id === sourceTabId);
+  
+  if (!sourceTab) {
+    throw new Error('Source tab not found');
+  }
+
+  const sourceCleanTitle = cleanTitle(sourceTab.title);
+  if (!sourceCleanTitle) {
+    throw new Error('Source tab has no valid title');
+  }
+
+  const cacheKey = `title:${sourceCleanTitle}`;
+  let sourceEmbedding = embeddingCache.get(cacheKey);
+  
+  if (!sourceEmbedding) {
+    sourceEmbedding = await getEmbedding(sourceCleanTitle);
+    embeddingCache.set(cacheKey, sourceEmbedding);
+  }
+
+  const tabEmbeddings = [];
+  
+  for (const tab of tabs) {
+    if (tab.id === sourceTabId) continue;
+    
+    const cleanTitle = cleanTitle(tab.title);
+    if (!cleanTitle) continue;
+    
+    const key = `title:${cleanTitle}`;
+    let embedding = embeddingCache.get(key);
+    
+    if (!embedding) {
+      embedding = await getEmbedding(cleanTitle);
+      embeddingCache.set(key, embedding);
+    }
+    
+    const similarity = cosineSimilarity(sourceEmbedding, embedding);
+    
+    tabEmbeddings.push({
+      tab,
+      similarity,
+      isSimilar: similarity >= threshold
+    });
+  }
+
+  tabEmbeddings.sort((a, b) => b.similarity - a.similarity);
+
+  let movedCount = 0;
+  const sourceIndex = sourceTab.index;
+
+  if (method === 'sort') {
+    for (let i = 0; i < tabEmbeddings.length; i++) {
+      const targetIndex = sourceIndex + 1 + i;
+      if (tabEmbeddings[i].tab.index !== targetIndex) {
+        await browser.tabs.move(tabEmbeddings[i].tab.id, { index: targetIndex });
+        movedCount++;
+      }
+    }
+  } else {
+    const similarTabs = tabEmbeddings.filter(t => t.isSimilar);
+    const otherTabs = tabEmbeddings.filter(t => !t.isSimilar);
+    
+    let insertIndex = sourceIndex + 1;
+    
+    for (const item of similarTabs) {
+      if (item.tab.index !== insertIndex) {
+        await browser.tabs.move(item.tab.id, { index: insertIndex });
+        movedCount++;
+      }
+      insertIndex++;
+    }
+    
+    for (const item of otherTabs) {
+      if (item.tab.index !== insertIndex) {
+        await browser.tabs.move(item.tab.id, { index: insertIndex });
+        movedCount++;
+      }
+      insertIndex++;
+    }
+  }
+
+  return movedCount;
+}
+
 browser.contextMenus.create({
   id: 'close-all',
   title: 'Close all tabs from this website',
@@ -86,6 +368,82 @@ browser.contextMenus.create({
   contexts: ['tab']
 });
 
-browser.contextMenus.onClicked.addListener(closeTabsByHostname);
+browser.contextMenus.create({
+  id: 'sort',
+  title: 'Sort tabs',
+  contexts: ['tab']
+});
 
-browser.action.onClicked.addListener(sortTabs);
+browser.contextMenus.create({
+  id: 'sort-domain',
+  title: 'Sort by domain',
+  contexts: ['tab'],
+  parentId: 'sort'
+});
+
+browser.contextMenus.create({
+  id: 'sort-subdomain',
+  title: 'Sort by subdomain',
+  contexts: ['tab'],
+  parentId: 'sort'
+});
+
+browser.contextMenus.create({
+  id: 'sort-similarity',
+  title: 'Sort by Similarity',
+  contexts: ['tab']
+});
+
+browser.contextMenus.create({
+  id: 'sort-similarity-group',
+  title: 'Group similar tabs',
+  contexts: ['tab'],
+  parentId: 'sort-similarity'
+});
+
+browser.contextMenus.create({
+  id: 'sort-similarity-sort',
+  title: 'Sort by similarity',
+  contexts: ['tab'],
+  parentId: 'sort-similarity'
+});
+
+browser.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId === 'close-all' || info.menuItemId === 'close-others') {
+    await closeTabsByHostname(info, tab);
+  } else if (info.menuItemId === 'sort-domain') {
+    await sortTabsByDomain();
+  } else if (info.menuItemId === 'sort-subdomain') {
+    await sortTabsBySubdomain();
+  } else if (info.menuItemId === 'sort-similarity-group') {
+    await sortBySimilarity(tab.id, 'group', 0.5);
+  } else if (info.menuItemId === 'sort-similarity-sort') {
+    await sortBySimilarity(tab.id, 'sort', 0.5);
+  }
+});
+
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'sortByDomain') {
+    sortTabsByDomain()
+      .then(moved => sendResponse({ success: true, moved }))
+      .catch(err => sendResponse({ success: false, error: err.message }));
+    return true;
+  } else if (message.action === 'sortBySubdomain') {
+    sortTabsBySubdomain()
+      .then(moved => sendResponse({ success: true, moved }))
+      .catch(err => sendResponse({ success: false, error: err.message }));
+    return true;
+  } else if (message.action === 'sortBySimilarity') {
+    sortBySimilarity(message.sourceTabId, message.method, message.threshold)
+      .then(moved => sendResponse({ success: true, moved }))
+      .catch(err => sendResponse({ success: false, error: err.message }));
+    return true;
+  } else if (message.action === 'checkApiKey') {
+    getApiKey()
+      .then(key => sendResponse({ success: true, hasKey: true }))
+      .catch(err => sendResponse({ success: true, hasKey: false, error: err.message }));
+    return true;
+  }
+});
+
+browser.action.onClicked.addListener(sortTabsBySubdomain);
