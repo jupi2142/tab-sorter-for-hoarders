@@ -26,7 +26,7 @@ async function fetchEmbeddingsSequential(texts, apiKey) {
   const results = [];
   
   for (let i = 0; i < texts.length; i++) {
-    results.push({ text: texts[i], embedding: data.responses[i].embedding.values });
+    results.push({ text: texts[i], embedding: data.embeddings[i].values });
   }
   
   return results;
