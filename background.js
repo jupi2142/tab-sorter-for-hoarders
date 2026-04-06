@@ -299,6 +299,11 @@ async function sortBySimilarity(sourceTabId, method, threshold, popupTabId) {
     throw new Error('Source tab not found');
   }
 
+  if (sourceTab.index !== 0) {
+    await browser.tabs.move(sourceTabId, { index: 0 });
+    sourceTab.index = 0;
+  }
+
   const sourceCleanTitle = cleanTitle(sourceTab.title);
   if (!sourceCleanTitle) {
     throw new Error('Source tab has no valid title');
