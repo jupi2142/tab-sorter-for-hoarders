@@ -359,56 +359,41 @@ async function sortBySimilarity(sourceTabId, method, threshold, popupTabId) {
 }
 
 browser.contextMenus.create({
-  id: 'close-all',
-  title: 'Close all tabs from this website',
-  contexts: ['tab']
-});
-
-browser.contextMenus.create({
-  id: 'close-others',
-  title: 'Close other tabs from this website',
-  contexts: ['tab']
-});
-
-browser.contextMenus.create({
-  id: 'sort',
-  title: 'Sort tabs',
-  contexts: ['tab']
-});
-
-browser.contextMenus.create({
   id: 'sort-domain',
   title: 'Sort by domain',
   contexts: ['tab'],
-  parentId: 'sort'
 });
 
 browser.contextMenus.create({
   id: 'sort-subdomain',
   title: 'Sort by subdomain',
   contexts: ['tab'],
-  parentId: 'sort'
-});
-
-browser.contextMenus.create({
-  id: 'sort-similarity',
-  title: 'Sort by Similarity',
-  contexts: ['tab']
-});
-
-browser.contextMenus.create({
-  id: 'sort-similarity-group',
-  title: 'Group similar tabs',
-  contexts: ['tab'],
-  parentId: 'sort-similarity'
 });
 
 browser.contextMenus.create({
   id: 'sort-similarity-sort',
   title: 'Sort by similarity',
   contexts: ['tab'],
-  parentId: 'sort-similarity'
 });
+
+browser.contextMenus.create({
+  id: 'sort-similarity-group',
+  title: 'Group similar tabs',
+  contexts: ['tab'],
+});
+
+browser.contextMenus.create({
+  id: 'close-all',
+  title: 'Close all tabs from this website',
+  contexts: ['tab'],
+});
+
+browser.contextMenus.create({
+  id: 'close-others',
+  title: 'Close other tabs from this website',
+  contexts: ['tab'],
+});
+
 
 browser.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === 'close-all' || info.menuItemId === 'close-others') {
