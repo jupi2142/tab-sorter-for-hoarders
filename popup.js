@@ -11,6 +11,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const similarityMethods = ['group', 'sort'];
 
+  browser.runtime.onMessage.addListener((message) => {
+    if (message.action === 'progress') {
+      status.textContent = message.message;
+    }
+  });
+
   async function checkApiKey() {
     try {
       const response = await browser.runtime.sendMessage({ action: 'checkApiKey' });

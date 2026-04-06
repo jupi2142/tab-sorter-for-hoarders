@@ -11,9 +11,9 @@ async function build() {
   const isWatch = process.argv.includes('--watch');
 
   const ctx = await esbuild.context({
-    entryPoints: ['background.js'],
+    entryPoints: ['background.js', 'settings.js'],
     bundle: true,
-    outfile: 'dist/background.js',
+    outdir: 'dist',
     format: 'iife',
     platform: 'browser',
     target: ['chrome110'],
@@ -30,7 +30,7 @@ async function build() {
   } else {
     await ctx.rebuild();
     await ctx.dispose();
-    console.log('Build complete: dist/background.js');
+    console.log('Build complete');
   }
 }
 

@@ -1,3 +1,5 @@
+import { GoogleGenerativeAIEmbeddings } from '@langchain/google-genai';
+
 const SITE_NAMES = [
   'youtube', 'www.youtube', 'youtu.be',
   'facebook', 'www.facebook', 'fb.com',
@@ -56,51 +58,36 @@ async function getApiKey() {
   return apiKey;
 }
 
+let embeddings = null;
+
+async function getEmbeddings() {
+  if (!embeddings) {
+    const key = await getApiKey();
+    embeddings = new GoogleGenerativeAIEmbeddings({
+      model: 'embedding-001',
+      apiKey: key,
+    });
+  }
+  return embeddings;
+}
+
 async function getEmbedding(text) {
   const cacheKey = text.toLowerCase().trim();
   
-  // Check in-memory cache first
   if (embeddingCache.has(cacheKey)) {
     return embeddingCache.get(cacheKey);
   }
 
-  // Check persistent storage
   const stored = await browser.storage.local.get('embedding_' + cacheKey);
   if (stored['embedding_' + cacheKey]) {
     const cached = stored['embedding_' + cacheKey];
     embeddingCache.set(cacheKey, cached);
     return cached;
   }
-
-  const key = await getApiKey();
   
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1/models/gemini-embedding-001:embedContent?key=${key}`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'models/gemini-embedding-001',
-        content: {
-          parts: [{ text: text }]
-        }
-      })
-    }
-  );
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error?.message || 'Failed to get embedding');
-  }
-
-  const data = await response.json();
-  const embedding = data.embedding.values;
+  const embedding = await (await getEmbeddings()).embedQuery(text);
   
   embeddingCache.set(cacheKey, embedding);
-  
-  // Persist to storage
   await browser.storage.local.set({ ['embedding_' + cacheKey]: embedding });
   
   return embedding;
@@ -271,7 +258,13 @@ async function closeTabsByHostname(info, tab) {
   }
 }
 
-async function sortBySimilarity(sourceTabId, method, threshold) {
+const EMBEDDING_DELAY_MS = 200;
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function sortBySimilarity(sourceTabId, method, threshold, popupTabId) {
   const tabs = await browser.tabs.query({ currentWindow: true });
   const sourceTab = tabs.find(t => t.id === sourceTabId);
   
@@ -293,19 +286,28 @@ async function sortBySimilarity(sourceTabId, method, threshold) {
   }
 
   const tabEmbeddings = [];
+  const totalTabs = tabs.length - 1;
   
   for (const tab of tabs) {
     if (tab.id === sourceTabId) continue;
     
-    const cleanTitle = cleanTitle(tab.title);
-    if (!cleanTitle) continue;
+    const cleanTitleText = cleanTitle(tab.title);
+    if (!cleanTitleText) continue;
     
-    const key = `title:${cleanTitle}`;
+    const key = `title:${cleanTitleText}`;
     let embedding = embeddingCache.get(key);
     
     if (!embedding) {
-      embedding = await getEmbedding(cleanTitle);
+      embedding = await getEmbedding(cleanTitleText);
       embeddingCache.set(key, embedding);
+      await delay(EMBEDDING_DELAY_MS);
+      
+      if (popupTabId) {
+        browser.tabs.sendMessage(popupTabId, { 
+          action: 'progress', 
+          message: `Processing tabs... (${tabEmbeddings.length + 1}/${totalTabs})` 
+        }).catch(() => {});
+      }
     }
     
     const similarity = cosineSimilarity(sourceEmbedding, embedding);
@@ -434,7 +436,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch(err => sendResponse({ success: false, error: err.message }));
     return true;
   } else if (message.action === 'sortBySimilarity') {
-    sortBySimilarity(message.sourceTabId, message.method, message.threshold)
+    sortBySimilarity(message.sourceTabId, message.method, message.threshold, sender.tab?.id)
       .then(moved => sendResponse({ success: true, moved }))
       .catch(err => sendResponse({ success: false, error: err.message }));
     return true;
