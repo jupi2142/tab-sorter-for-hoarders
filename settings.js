@@ -22,9 +22,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     status.textContent = 'Testing API key...';
 
     try {
-      const { GoogleGenerativeAIEmbeddings } = await import('@langchain/google-genai');
-      const embeddings = new GoogleGenerativeAIEmbeddings({ apiKey, model: 'embedding-001' });
-      await embeddings.embedQuery('test');
+      const response = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': apiKey,
+          },
+          body: JSON.stringify({
+            content: {
+              parts: [{ text: 'test' }]
+            },
+            taskType: 'SEMANTIC_SIMILARITY'
+          })
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Invalid API key');
+      }
 
       await browser.storage.local.set({ googleApiKey: apiKey });
       

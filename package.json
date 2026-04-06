@@ -14,7 +14,5 @@
   "devDependencies": {
     "esbuild": "^0.27.4"
   },
-  "dependencies": {
-    "@langchain/google-genai": "^2.1.26"
-  }
+  "dependencies": {}
 }

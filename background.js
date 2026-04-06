@@ -1,7 +1,77 @@
-import { GoogleGenerativeAIEmbeddings } from '@langchain/google-genai';
+async function fetchEmbeddingsSequential(texts, apiKey) {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        content: {
+          parts: texts.map(text => ({ text }))
+        },
+        taskType: 'SEMANTIC_SIMILARITY'
+      })
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Embedding API error: ${response.status} - ${error}`);
+  }
+
+  const data = await response.json();
+  const results = [];
+  
+  for (let i = 0; i < texts.length; i++) {
+    results.push({ text: texts[i], embedding: data.embedding.values[i] });
+  }
+  
+  return results;
+}
+
+const CHUNK_SIZE = 30;
+
+async function getEmbeddingsBatch(texts) {
+  const results = [];
+  const textsToFetch = [];
+
+  for (const text of texts) {
+    const key = text.toLowerCase().trim();
+    if (embeddingCache.has(key)) {
+      results.push({ text, embedding: embeddingCache.get(key) });
+    } else {
+      const stored = await browser.storage.local.get('embedding_' + key);
+      if (stored['embedding_' + key]) {
+        const cached = stored['embedding_' + key];
+        embeddingCache.set(key, cached);
+        results.push({ text, embedding: cached });
+      } else {
+        textsToFetch.push(text);
+      }
+    }
+  }
+
+  if (textsToFetch.length === 0) return results;
+
+  const apiKey = await getApiKey();
+  for (let i = 0; i < textsToFetch.length; i += CHUNK_SIZE) {
+    const chunk = textsToFetch.slice(i, i + CHUNK_SIZE);
+    const embeddings = await fetchEmbeddingsSequential(chunk, apiKey);
+
+    for (const { text, embedding } of embeddings) {
+      const key = text.toLowerCase().trim();
+      embeddingCache.set(key, embedding);
+      await browser.storage.local.set({ ['embedding_' + key]: embedding });
+      results.push({ text, embedding });
+    }
+  }
+
+  return results;
+}
 
 const SITE_NAMES = [
-  'youtube', 'www.youtube', 'youtu.be',
   'facebook', 'www.facebook', 'fb.com',
   'twitter', 'www.twitter', 'x.com', 'www.x.com',
   'reddit', 'www.reddit', 'old.reddit',
@@ -45,52 +115,14 @@ const TITLE_SEPARATORS = [
   ' on ', ' - ', ': ', '| '
 ];
 
-let apiKey = null;
 let embeddingCache = new Map();
 
 async function getApiKey() {
-  if (apiKey) return apiKey;
   const stored = await browser.storage.local.get('googleApiKey');
   if (!stored.googleApiKey) {
     throw new Error('API key not configured. Please set up your Google AI API key in settings.');
   }
-  apiKey = stored.googleApiKey;
-  return apiKey;
-}
-
-let embeddings = null;
-
-async function getEmbeddings() {
-  if (!embeddings) {
-    const key = await getApiKey();
-    embeddings = new GoogleGenerativeAIEmbeddings({
-      model: 'embedding-001',
-      apiKey: key,
-    });
-  }
-  return embeddings;
-}
-
-async function getEmbedding(text) {
-  const cacheKey = text.toLowerCase().trim();
-  
-  if (embeddingCache.has(cacheKey)) {
-    return embeddingCache.get(cacheKey);
-  }
-
-  const stored = await browser.storage.local.get('embedding_' + cacheKey);
-  if (stored['embedding_' + cacheKey]) {
-    const cached = stored['embedding_' + cacheKey];
-    embeddingCache.set(cacheKey, cached);
-    return cached;
-  }
-  
-  const embedding = await (await getEmbeddings()).embedQuery(text);
-  
-  embeddingCache.set(cacheKey, embedding);
-  await browser.storage.local.set({ ['embedding_' + cacheKey]: embedding });
-  
-  return embedding;
+  return stored.googleApiKey;
 }
 
 function cleanTitle(title) {
@@ -258,12 +290,6 @@ async function closeTabsByHostname(info, tab) {
   }
 }
 
-const EMBEDDING_DELAY_MS = 200;
-
-function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
 async function sortBySimilarity(sourceTabId, method, threshold, popupTabId) {
   const tabs = await browser.tabs.query({ currentWindow: true });
   const sourceTab = tabs.find(t => t.id === sourceTabId);
@@ -277,49 +303,70 @@ async function sortBySimilarity(sourceTabId, method, threshold, popupTabId) {
     throw new Error('Source tab has no valid title');
   }
 
-  const cacheKey = `title:${sourceCleanTitle}`;
-  let sourceEmbedding = embeddingCache.get(cacheKey);
-  
-  if (!sourceEmbedding) {
-    sourceEmbedding = await getEmbedding(sourceCleanTitle);
-    embeddingCache.set(cacheKey, sourceEmbedding);
-  }
+  const tabTitles = [];
+  const tabMap = new Map();
 
-  const tabEmbeddings = [];
-  const totalTabs = tabs.length - 1;
-  
+  tabTitles.push(sourceCleanTitle);
+  tabMap.set(sourceCleanTitle, { tab: sourceTab, isSource: true });
+
   for (const tab of tabs) {
     if (tab.id === sourceTabId) continue;
     
     const cleanTitleText = cleanTitle(tab.title);
     if (!cleanTitleText) continue;
     
-    const key = `title:${cleanTitleText}`;
-    let embedding = embeddingCache.get(key);
-    
-    if (!embedding) {
-      embedding = await getEmbedding(cleanTitleText);
-      embeddingCache.set(key, embedding);
-      await delay(EMBEDDING_DELAY_MS);
-      
-      if (popupTabId) {
-        browser.tabs.sendMessage(popupTabId, { 
-          action: 'progress', 
-          message: `Processing tabs... (${tabEmbeddings.length + 1}/${totalTabs})` 
-        }).catch(() => {});
-      }
-    }
-    
+    tabTitles.push(cleanTitleText);
+    tabMap.set(cleanTitleText, { tab, isSource: false });
+  }
+
+  const embeddingResults = await getEmbeddingsBatch(tabTitles);
+
+  const embeddingMap = new Map();
+  for (const result of embeddingResults) {
+    embeddingMap.set(result.text, result.embedding);
+  }
+
+  const sourceEmbedding = embeddingMap.get(sourceCleanTitle);
+  if (!sourceEmbedding) {
+    throw new Error('Failed to get source embedding');
+  }
+
+  const tabEmbeddings = [];
+  let processedCount = 0;
+  const totalTabs = tabTitles.length - 1;
+
+  for (const [text, data] of tabMap) {
+    if (data.isSource) continue;
+
+    const embedding = embeddingMap.get(text);
+    if (!embedding) continue;
+
     const similarity = cosineSimilarity(sourceEmbedding, embedding);
     
     tabEmbeddings.push({
-      tab,
+      tab: data.tab,
       similarity,
       isSimilar: similarity >= threshold
     });
+
+    processedCount++;
+    if (popupTabId && processedCount % 5 === 0) {
+      browser.tabs.sendMessage(popupTabId, { 
+        action: 'progress', 
+        message: `Processing tabs... (${processedCount}/${totalTabs})` 
+      }).catch(() => {});
+    }
   }
 
   tabEmbeddings.sort((a, b) => b.similarity - a.similarity);
+
+  console.log(`%c Similarity Sort Results for: "${sourceCleanTitle}" `, 'background: #222; color: #bada55; font-size: 14px;');
+  console.table(tabEmbeddings.map((item, index) => ({
+    rank: index + 1,
+    title: item.tab.title.substring(0, 60) + (item.tab.title.length > 60 ? '...' : ''),
+    similarity: item.similarity.toFixed(4),
+    tabId: item.tab.id
+  })));
 
   let movedCount = 0;
   const sourceIndex = sourceTab.index;
@@ -402,10 +449,13 @@ browser.contextMenus.onClicked.addListener(async (info, tab) => {
     await sortTabsByDomain();
   } else if (info.menuItemId === 'sort-subdomain') {
     await sortTabsBySubdomain();
-  } else if (info.menuItemId === 'sort-similarity-group') {
-    await sortBySimilarity(tab.id, 'group', 0.5);
-  } else if (info.menuItemId === 'sort-similarity-sort') {
-    await sortBySimilarity(tab.id, 'sort', 0.5);
+  } else if (info.menuItemId === 'sort-similarity-group' || info.menuItemId === 'sort-similarity-sort') {
+    try {
+      await getApiKey();
+      await sortBySimilarity(tab.id, info.menuItemId === 'sort-similarity-group' ? 'group' : 'sort', 0.5);
+    } catch (err) {
+      browser.action.openPopup();
+    }
   }
 });
 

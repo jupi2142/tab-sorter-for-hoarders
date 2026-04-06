@@ -6,8 +6,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   const status = document.getElementById('status');
   const similaritySection = document.getElementById('similaritySection');
   const settingsBtn = document.getElementById('settingsBtn');
-  const apiWarning = document.getElementById('apiWarning');
-  const setupLink = document.getElementById('setupLink');
+  const apiKeyModal = document.getElementById('apiKeyModal');
+  const apiKeyInput = document.getElementById('apiKeyInput');
+  const saveApiKeyBtn = document.getElementById('saveApiKeyBtn');
 
   const similarityMethods = ['group', 'sort'];
 
@@ -26,27 +27,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  async function updateApiWarning() {
-    const isSimilarity = similarityMethods.includes(methodSelect.value);
-    if (isSimilarity) {
-      const hasKey = await checkApiKey();
-      apiWarning.classList.toggle('visible', !hasKey);
-      runBtn.disabled = !hasKey;
-      if (!hasKey) {
-        runBtn.textContent = 'API Key Required';
-      }
-    } else {
-      apiWarning.classList.remove('visible');
-      runBtn.disabled = false;
-    }
-  }
-
   settingsBtn.addEventListener('click', () => {
-    browser.runtime.openOptionsPage();
-  });
-
-  setupLink.addEventListener('click', (e) => {
-    e.preventDefault();
     browser.runtime.openOptionsPage();
   });
 
@@ -61,27 +42,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       sort: 'Sort by Similarity'
     };
     runBtn.textContent = methodLabels[methodSelect.value] || 'Sort';
-    
-    updateApiWarning();
   });
 
   thresholdSlider.addEventListener('input', () => {
     thresholdValue.textContent = thresholdSlider.value;
   });
 
-  runBtn.addEventListener('click', async () => {
+  async function runSort() {
     const method = methodSelect.value;
     const threshold = parseFloat(thresholdSlider.value);
-
-    const isSimilarity = similarityMethods.includes(method);
-    if (isSimilarity) {
-      const hasKey = await checkApiKey();
-      if (!hasKey) {
-        status.className = 'status error';
-        status.textContent = 'Please configure your API key in settings';
-        return;
-      }
-    }
 
     runBtn.disabled = true;
     runBtn.textContent = 'Processing...';
@@ -134,7 +103,42 @@ document.addEventListener('DOMContentLoaded', async () => {
       };
       runBtn.textContent = methodLabels[methodSelect.value] || 'Sort';
     }
+  }
+
+  saveApiKeyBtn.addEventListener('click', async () => {
+    const apiKey = apiKeyInput.value.trim();
+    if (!apiKey) return;
+
+    console.log('Saving API key:', apiKey.substring(0, 10) + '...');
+    await browser.storage.local.set({ googleApiKey: apiKey });
+    
+    const stored = await browser.storage.local.get('googleApiKey');
+    console.log('Verified storage:', stored.googleApiKey ? 'key exists' : 'key NOT found');
+    
+    apiKeyModal.classList.remove('visible');
+    apiKeyInput.value = '';
+    await runSort();
   });
 
-  updateApiWarning();
+  apiKeyInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      saveApiKeyBtn.click();
+    }
+  });
+
+  runBtn.addEventListener('click', async () => {
+    const method = methodSelect.value;
+    const isSimilarity = similarityMethods.includes(method);
+    
+    if (isSimilarity) {
+      const hasKey = await checkApiKey();
+      if (!hasKey) {
+        apiKeyModal.classList.add('visible');
+        apiKeyInput.focus();
+        return;
+      }
+    }
+
+    await runSort();
+  });
 });
