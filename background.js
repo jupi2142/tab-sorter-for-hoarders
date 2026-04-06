@@ -1,6 +1,6 @@
 async function fetchEmbeddingsSequential(texts, apiKey) {
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2-preview:batchEmbedContents`,
     {
       method: 'POST',
       headers: {
@@ -8,10 +8,11 @@ async function fetchEmbeddingsSequential(texts, apiKey) {
         'x-goog-api-key': apiKey,
       },
       body: JSON.stringify({
-        content: {
-          parts: texts.map(text => ({ text }))
-        },
-        taskType: 'SEMANTIC_SIMILARITY'
+        requests: texts.map(text => ({
+          model: 'models/gemini-embedding-2-preview',
+          content: { parts: [{ text }] },
+          output_dimensionality: 128
+        }))
       })
     }
   );
@@ -25,7 +26,7 @@ async function fetchEmbeddingsSequential(texts, apiKey) {
   const results = [];
   
   for (let i = 0; i < texts.length; i++) {
-    results.push({ text: texts[i], embedding: data.embedding.values[i] });
+    results.push({ text: texts[i], embedding: data.responses[i].embedding.values });
   }
   
   return results;

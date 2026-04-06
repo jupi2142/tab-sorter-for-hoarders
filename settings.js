@@ -23,7 +23,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     try {
       const response = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent',
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2-preview:batchEmbedContents',
         {
           method: 'POST',
           headers: {
@@ -31,10 +31,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             'x-goog-api-key': apiKey,
           },
           body: JSON.stringify({
-            content: {
-              parts: [{ text: 'test' }]
-            },
-            taskType: 'SEMANTIC_SIMILARITY'
+            requests: [{
+              model: 'models/gemini-embedding-2-preview',
+              content: { parts: [{ text: 'test' }] }
+            }]
           })
         }
       );
