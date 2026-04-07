@@ -62,3 +62,5 @@ function getSubdomainKey(tab) {
     return '\uffff';
   }
 }
+
+export { getHostname, getDomainKey, getSubdomainKey };

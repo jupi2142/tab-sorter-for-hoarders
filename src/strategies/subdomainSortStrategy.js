@@ -23,3 +23,5 @@ class SubdomainSortStrategy {
     return movedCount;
   }
 }
+
+export { SubdomainSortStrategy };

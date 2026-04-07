@@ -1,7 +1,7 @@
 const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2-preview:batchEmbedContents';
 const CHUNK_SIZE = 30;
 
-class EmbeddingService {
+var EmbeddingService = class EmbeddingService {
   constructor(storage) {
     this.storage = storage;
     this.cache = new Map();
@@ -73,4 +73,6 @@ class EmbeddingService {
 
     return results;
   }
-}
+};
+
+export { EmbeddingService };

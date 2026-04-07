@@ -9,3 +9,5 @@ function cosineSimilarity(a, b) {
   }
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 }
+
+export { cosineSimilarity };

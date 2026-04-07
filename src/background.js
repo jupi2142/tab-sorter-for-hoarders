@@ -1,12 +1,12 @@
-const { EmbeddingService } = require('./core/embedding');
-const { cosineSimilarity } = require('./core/similarity');
-const { cleanTitle } = require('./core/titleCleaner');
-const { getHostname, getDomainKey, getSubdomainKey } = require('./core/urlParser');
-const { DomainSortStrategy } = require('./strategies/domainSortStrategy');
-const { SubdomainSortStrategy } = require('./strategies/subdomainSortStrategy');
-const { SimilaritySortStrategy } = require('./strategies/similaritySortStrategy');
-const { StorageAdapter } = require('./infrastructure/storage');
-const { MessageHandler, ContextMenuManager } = require('./infrastructure/messages');
+import { EmbeddingService } from './core/embedding.js';
+import { cosineSimilarity } from './core/similarity.js';
+import { cleanTitle } from './core/titleCleaner.js';
+import { getHostname, getDomainKey, getSubdomainKey } from './core/urlParser.js';
+import { DomainSortStrategy } from './strategies/domainSortStrategy.js';
+import { SubdomainSortStrategy } from './strategies/subdomainSortStrategy.js';
+import { SimilaritySortStrategy } from './strategies/similaritySortStrategy.js';
+import { StorageAdapter } from './infrastructure/storage.js';
+import { MessageHandler, ContextMenuManager } from './infrastructure/messages.js';
 
 const urlParser = { getHostname, getDomainKey, getSubdomainKey };
 const storage = new StorageAdapter();

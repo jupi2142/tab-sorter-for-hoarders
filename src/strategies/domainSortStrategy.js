@@ -23,3 +23,5 @@ class DomainSortStrategy {
     return movedCount;
   }
 }
+
+export { DomainSortStrategy };

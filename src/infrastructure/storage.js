@@ -24,3 +24,5 @@ class StorageAdapter {
     }
   }
 }
+
+export { StorageAdapter };

@@ -66,3 +66,5 @@ function cleanTitle(title) {
   
   return cleaned;
 }
+
+export { cleanTitle, SITE_NAMES, TITLE_SEPARATORS };

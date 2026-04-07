@@ -117,3 +117,5 @@ class SimilaritySortStrategy {
     return movedCount;
   }
 }
+
+export { SimilaritySortStrategy };

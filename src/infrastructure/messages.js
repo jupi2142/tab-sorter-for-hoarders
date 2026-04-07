@@ -117,3 +117,5 @@ class ContextMenuManager {
     }
   }
 }
+
+export { MessageHandler, ContextMenuManager };
