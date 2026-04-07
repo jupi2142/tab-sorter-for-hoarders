@@ -11,7 +11,7 @@ async function build() {
   const isWatch = process.argv.includes('--watch');
 
   const ctx = await esbuild.context({
-    entryPoints: ['background.js', 'settings.js'],
+    entryPoints: ['src/background.js'],
     bundle: true,
     outdir: 'dist',
     format: 'iife',
@@ -32,6 +32,8 @@ async function build() {
     await ctx.dispose();
     console.log('Build complete');
   }
+
+  fs.copyFileSync('settings.js', 'dist/settings.js');
 }
 
 build().catch((err) => {
