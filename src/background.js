@@ -33,8 +33,12 @@ contextMenu.setSortCallback(async (info, tab) => {
   } else if (info.menuItemId === 'sort-subdomain') {
     await strategies.subdomain.execute(await browser.tabs.query({ currentWindow: true }));
   } else if (info.menuItemId === 'sort-similarity-group' || info.menuItemId === 'sort-similarity-sort') {
+    const hasKey = await storage.hasApiKey();
+    if (!hasKey) {
+      browser.action.openPopup();
+      return;
+    }
     try {
-      await storage.getApiKey();
       await strategies.similarity.execute(
         await browser.tabs.query({ currentWindow: true }),
         tab.id,
@@ -42,7 +46,7 @@ contextMenu.setSortCallback(async (info, tab) => {
         0.5
       );
     } catch (err) {
-      browser.action.openPopup();
+      console.error('Similarity sort error:', err);
     }
   }
 });
