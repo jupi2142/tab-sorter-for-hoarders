@@ -32,7 +32,7 @@ async function fetchEmbeddingsSequential(texts, apiKey) {
   return results;
 }
 
-const CHUNK_SIZE = 30;
+const CHUNK_SIZE_KEY = 'chunkSize';
 
 async function getEmbeddingsBatch(texts) {
   const results = [];
@@ -57,8 +57,11 @@ async function getEmbeddingsBatch(texts) {
   if (textsToFetch.length === 0) return results;
 
   const apiKey = await getApiKey();
-  for (let i = 0; i < textsToFetch.length; i += CHUNK_SIZE) {
-    const chunk = textsToFetch.slice(i, i + CHUNK_SIZE);
+  const stored = await browser.storage.local.get(CHUNK_SIZE_KEY);
+  const chunkSize = stored[CHUNK_SIZE_KEY] || 30;
+
+  for (let i = 0; i < textsToFetch.length; i += chunkSize) {
+    const chunk = textsToFetch.slice(i, i + chunkSize);
     const embeddings = await fetchEmbeddingsSequential(chunk, apiKey);
 
     for (const { text, embedding } of embeddings) {

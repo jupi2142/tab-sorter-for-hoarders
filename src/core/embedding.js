@@ -1,5 +1,4 @@
 const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2-preview:batchEmbedContents';
-const CHUNK_SIZE = 30;
 
 var EmbeddingService = class EmbeddingService {
   constructor(storage) {
@@ -54,9 +53,10 @@ var EmbeddingService = class EmbeddingService {
     if (textsToFetch.length === 0) return results;
 
     const apiKey = await this.storage.getApiKey();
+    const chunkSize = await this.storage.getChunkSize();
     
-    for (let i = 0; i < textsToFetch.length; i += CHUNK_SIZE) {
-      const chunk = textsToFetch.slice(i, i + CHUNK_SIZE);
+    for (let i = 0; i < textsToFetch.length; i += chunkSize) {
+      const chunk = textsToFetch.slice(i, i + chunkSize);
       const embeddings = await this.fetchFromApi(chunk, apiKey);
 
       for (const { text, embedding } of embeddings) {

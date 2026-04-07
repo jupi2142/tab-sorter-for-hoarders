@@ -1,11 +1,15 @@
 document.addEventListener('DOMContentLoaded', async () => {
   const apiKeyInput = document.getElementById('apiKey');
+  const chunkSizeInput = document.getElementById('chunkSize');
   const saveBtn = document.getElementById('saveBtn');
   const status = document.getElementById('status');
 
-  const stored = await browser.storage.local.get('googleApiKey');
+  const stored = await browser.storage.local.get(['googleApiKey', 'chunkSize']);
   if (stored.googleApiKey) {
     apiKeyInput.value = stored.googleApiKey;
+  }
+  if (stored.chunkSize) {
+    chunkSizeInput.value = stored.chunkSize;
   }
 
   saveBtn.addEventListener('click', async () => {
@@ -43,10 +47,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         throw new Error('Invalid API key');
       }
 
-      await browser.storage.local.set({ googleApiKey: apiKey });
+      const chunkSize = parseInt(chunkSizeInput.value, 10) || 30;
+      await browser.storage.local.set({ 
+        googleApiKey: apiKey,
+        chunkSize: chunkSize
+      });
       
       status.className = 'status success';
-      status.textContent = 'API key saved successfully!';
+      status.textContent = 'Settings saved successfully!';
       
       setTimeout(() => window.close(), 1500);
     } catch (err) {

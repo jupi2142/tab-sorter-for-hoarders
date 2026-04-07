@@ -23,6 +23,11 @@ class StorageAdapter {
       return false;
     }
   }
+
+  async getChunkSize() {
+    const stored = await this.get('chunkSize');
+    return stored.chunkSize || 30;
+  }
 }
 
 export { StorageAdapter };
