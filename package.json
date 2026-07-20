@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node build.js",
     "watch": "node build.js --watch",
-    "test": "vitest run"
+    "test": "vitest run --no-file-parallelism"
   },
   "keywords": [],
   "author": "",

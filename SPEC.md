@@ -1,102 +1,61 @@
 # Tab Sorter Extension - Specification
 
 ## Project Overview
+
 - **Project name**: Tab Sorter
 - **Type**: Firefox Web Extension (Manifest V3)
-- **Core functionality**: Sort browser tabs by website domain, subdomain, or semantic similarity using AI embeddings
+- **Core functionality**: Sort browser tabs by website domain, subdomain, or local semantic similarity
 - **Target users**: Firefox users who want to organize their tabs logically
 
-## UI/UX Specification
+## User Experience
 
-### Layout Structure
-- **Toolbar button**: Click to trigger default subdomain sorting
-- **Popup UI**: Opens on toolbar button click, provides sorting options
-- **Settings page**: Accessible via extension menu, configure API key
+### Interactions
 
-### Visual Design
-- Icon: Simple sorting arrows icon (SVG, 48x48)
-- Button size: Standard 16x16 or 32x32 toolbar icon
-- Popup: Clean interface with sort option buttons and status indicators
-- Settings: Simple form for API key input
+- **Toolbar button**: Sort the current window by subdomain.
+- **Context menu**: Right-click a tab to sort by domain, subdomain, similarity, or group similar tabs.
+- **Semantic progress**: Context-menu semantic actions show a Firefox notification while the offline model loads and while tabs are processed; the notification is cleared when the action finishes.
 
-### Components
-1. **Popup** (`popup.html` + `popup.js`): Main interaction point with sort buttons
-2. **Settings** (`settings.html` + `settings.js`): API key configuration page
-3. **Context Menu**: Right-click menu for sorting options
+There is no popup, settings page, account, or API-key setup.
+
+### Offline semantic similarity
+
+Semantic sorting is English-only in v1. It uses a bundled, quantized ONNX `all-MiniLM-L6-v2` embedding model through Transformers.js and ONNX Runtime Web with the WASM CPU backend. Model, tokenizer, JavaScript loader, and WASM binary are all included in the built extension; remote model loading is disabled.
+
+The first semantic action in a background-context lifetime initializes the model and may take a few seconds. Later semantic actions reuse that model while the background context remains active. Firefox may recreate the context, so a later action may safely initialize the model again. No network connection or cloud fallback is used.
+
+The uncompressed `dist/` output is currently expected to be about 36 MB, within the planned 25–50 MB package budget.
 
 ## Functionality Specification
 
-### Core Features
+### Sorting Strategies
 
-#### 1. Sorting Strategies
-- **Domain Sort**: Sort by base domain (e.g., "example.com")
-  - Key format: `domain\0path`
-- **Subdomain Sort**: Sort by full hostname including subdomains
-  - Key format: `domain\0subdomain\0path`
-- **Semantic Similarity Sort**: Sort by AI-powered semantic similarity
-  - Uses Google Generative Language API for embeddings
-  - Two modes:
-    - Group: Cluster related tabs together
-    - Sort: Order by similarity to a reference tab
+- **Domain sort**: Group tabs by base domain (for example, `example.com`) using `domain\0path` keys.
+- **Subdomain sort**: Group tabs by full hostname using `domain\0subdomain\0path` keys.
+- **Semantic similarity sort**: Order tabs by local embedding similarity to a selected reference tab.
+- **Semantic grouping**: Cluster locally similar English-titled tabs around the selected reference tab.
 
-#### 2. User Interactions
-- Toolbar button click → Opens popup or triggers default sort
-- Popup buttons → Trigger specific sorting strategies
-- Context menu → Right-click options for sorting
-- Settings page → Configure Google API key
+### URL Parsing and Tab Handling
 
-#### 3. URL Parsing
-- Extract hostname from tab URLs
-- Parse domain and subdomain components
-- Handle http, https protocols
-- Place invalid/empty URLs at end (using `\uffff`)
+- Extract hostnames from `http` and `https` URLs.
+- Handle `www` and non-`www` hostnames.
+- Put invalid or empty URLs at the end using `\uffff`.
+- Exclude tabs without usable cleaned titles from semantic ranking.
+- If local model startup or inference fails, report a local-runtime error and do not move tabs.
 
-### Technical Implementation
-- Use `browser.tabs` API for tab operations
-- Use `browser.contextMenus` for right-click menu
-- Use `browser.storage` for API key persistence
-- ES modules with esbuild for bundling
-- Google Generative Language API for embeddings
+## Technical Implementation
 
-### Edge Cases
-- Handle tabs without URLs (about:blank, about:addons, etc.)
-- Handle different protocols (http, https)
-- Handle www vs non-www domains
-- Handle empty/invalid URLs (placed at end)
-- Handle missing API key for similarity sort
-
-## Project Structure
-```
-tab-sorter-extension/
-├── src/
-│   ├── background.js         # Main extension logic
-│   ├── core/
-│   │   ├── embedding.js     # API call handling
-│   │   ├── similarity.js    # Cosine similarity calculation
-│   │   ├── titleCleaner.js  # Tab title processing
-│   │   └── urlParser.js     # URL parsing utilities
-│   ├── strategies/
-│   │   ├── domainSortStrategy.js
-│   │   ├── subdomainSortStrategy.js
-│   │   └── similaritySortStrategy.js
-│   └── infrastructure/
-│       ├── messages.js      # Message handling & context menus
-│       └── storage.js      # Storage adapter for API key
-├── dist/                    # Built output
-├── icons/                   # Extension icons
-├── manifest.json            # Extension manifest
-├── build.js                 # esbuild configuration
-├── popup.html / popup.js    # Popup UI
-└── settings.html / settings.js # Settings page
-```
+- Use `browser.tabs`, `browser.contextMenus`, and `browser.notifications` APIs.
+- Bundle JavaScript with esbuild.
+- Package the local model under `dist/models/` and the ONNX Runtime WASM module and binary under `dist/wasm/`.
+- Load model and WASM files only through extension URLs; no CDN or cloud embedding integration is shipped.
+- Keep title-vector caching in memory only for the current background-context lifetime.
 
 ## Acceptance Criteria
-1. Extension installs correctly in Firefox
-2. Toolbar button appears and opens popup
-3. Domain sort groups tabs by base domain
-4. Subdomain sort groups tabs by full hostname
-5. Similarity sort uses embeddings for semantic clustering
-6. Context menu provides sorting options
-7. Settings page allows API key configuration
-8. Invalid URLs are placed at the end
-9. Works with https:// and http:// URLs
+
+1. The extension installs correctly in Firefox.
+2. The toolbar button sorts by subdomain.
+3. Domain and subdomain sorting retain their existing behavior.
+4. Similarity sorting and grouping work with English tab titles without an API key, settings, account, or network connection.
+5. The first semantic action displays loading/progress feedback; a later one reuses the initialized local model when available.
+6. A rebuilt `dist/` contains the quantized model plus `ort-wasm-simd-threaded.mjs` and `ort-wasm-simd-threaded.wasm`.
+7. Invalid URLs remain at the end.
