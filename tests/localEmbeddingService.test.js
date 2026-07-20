@@ -22,6 +22,7 @@ describe('LocalEmbeddingService', () => {
     expect(runtimeEnv).toMatchObject({
       allowRemoteModels: false,
       allowLocalModels: true,
+      useBrowserCache: false,
       localModelPath: 'moz-extension://test/models/',
       backends: {
         onnx: {

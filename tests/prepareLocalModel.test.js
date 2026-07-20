@@ -8,12 +8,14 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const wasmTarget = path.join(root, 'dist/wasm');
 
 describe('prepare-local-model', () => {
-  it('copies the fixed WASM runtime and its module companion', () => {
+  it('copies the fixed WASM runtime, JSEP module, and their WASM companions', () => {
     execFileSync(process.execPath, ['scripts/prepare-local-model.mjs'], {
       cwd: root
     });
 
     expect(existsSync(path.join(wasmTarget, 'ort-wasm-simd-threaded.wasm'))).toBe(true);
     expect(existsSync(path.join(wasmTarget, 'ort-wasm-simd-threaded.mjs'))).toBe(true);
+    expect(existsSync(path.join(wasmTarget, 'ort-wasm-simd-threaded.jsep.wasm'))).toBe(true);
+    expect(existsSync(path.join(wasmTarget, 'ort-wasm-simd-threaded.jsep.mjs'))).toBe(true);
   });
 });

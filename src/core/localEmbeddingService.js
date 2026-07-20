@@ -11,6 +11,7 @@ export function configureLocalRuntime({
 }, runtimeEnv = env) {
   runtimeEnv.allowRemoteModels = allowRemoteModels;
   runtimeEnv.allowLocalModels = allowLocalModels;
+  runtimeEnv.useBrowserCache = false;
   runtimeEnv.localModelPath = localModelPath;
   runtimeEnv.backends.onnx.wasm.wasmPaths = wasmPath;
   runtimeEnv.backends.onnx.wasm.numThreads = numThreads;

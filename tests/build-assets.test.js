@@ -8,7 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const distPath = (...segments) => path.join(root, 'dist', ...segments);
 
 describe('offline build artifacts', () => {
-  it('ships the model and both ONNX Runtime assets without cloud or API-key configuration', () => {
+  it('ships the model and all required ONNX Runtime assets without cloud or API-key configuration', () => {
     rmSync(distPath(), { recursive: true, force: true });
     execFileSync(process.execPath, ['build.js'], {
       cwd: root,
@@ -24,6 +24,8 @@ describe('offline build artifacts', () => {
     ))).toBe(true);
     expect(existsSync(distPath('wasm', 'ort-wasm-simd-threaded.mjs'))).toBe(true);
     expect(existsSync(distPath('wasm', 'ort-wasm-simd-threaded.wasm'))).toBe(true);
+    expect(existsSync(distPath('wasm', 'ort-wasm-simd-threaded.jsep.mjs'))).toBe(true);
+    expect(existsSync(distPath('wasm', 'ort-wasm-simd-threaded.jsep.wasm'))).toBe(true);
 
     const manifest = JSON.parse(readFileSync(path.join(root, 'manifest.json'), 'utf8'));
     const background = readFileSync(distPath('background.js'), 'utf8');

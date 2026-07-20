@@ -13,7 +13,9 @@ const wasmSource = path.join(
 const wasmTarget = path.join(root, 'dist/wasm');
 const wasmAssets = [
   'ort-wasm-simd-threaded.wasm',
-  'ort-wasm-simd-threaded.mjs'
+  'ort-wasm-simd-threaded.mjs',
+  'ort-wasm-simd-threaded.jsep.wasm',
+  'ort-wasm-simd-threaded.jsep.mjs'
 ];
 const requiredModel = path.join(
   modelSource,
