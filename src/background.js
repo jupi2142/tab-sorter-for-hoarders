@@ -1,16 +1,15 @@
-import { EmbeddingService } from './core/embedding.js';
+import { LocalEmbeddingService } from './core/localEmbeddingService.js';
 import { cosineSimilarity } from './core/similarity.js';
 import { cleanTitle } from './core/titleCleaner.js';
 import { getHostname, getDomainKey, getSubdomainKey } from './core/urlParser.js';
 import { DomainSortStrategy } from './strategies/domainSortStrategy.js';
 import { SubdomainSortStrategy } from './strategies/subdomainSortStrategy.js';
 import { SimilaritySortStrategy } from './strategies/similaritySortStrategy.js';
-import { StorageAdapter } from './infrastructure/storage.js';
 import { MessageHandler, ContextMenuManager } from './infrastructure/messages.js';
 
 const urlParser = { getHostname, getDomainKey, getSubdomainKey };
-const storage = new StorageAdapter();
-const embeddingService = new EmbeddingService(storage);
+const SIMILARITY_PROGRESS_NOTIFICATION_ID = 'similarity-sort-progress';
+const embeddingService = new LocalEmbeddingService();
 
 const strategies = {
   domain: new DomainSortStrategy(urlParser),
@@ -19,8 +18,7 @@ const strategies = {
     embeddingService,
     similarityCalculator: cosineSimilarity,
     titleCleaner: { cleanTitle }
-  }),
-  storage
+  })
 };
 
 const messageHandler = new MessageHandler(strategies, urlParser);
@@ -33,11 +31,14 @@ contextMenu.setSortCallback(async (info, tab) => {
   } else if (info.menuItemId === 'sort-subdomain') {
     await strategies.subdomain.execute(await browser.tabs.query({ currentWindow: true }));
   } else if (info.menuItemId === 'sort-similarity-group' || info.menuItemId === 'sort-similarity-sort') {
-    const hasKey = await storage.hasApiKey();
-    if (!hasKey) {
-      browser.action.openPopup();
-      return;
-    }
+    strategies.similarity.progressCallback = message => {
+      browser.notifications.create(SIMILARITY_PROGRESS_NOTIFICATION_ID, {
+        type: 'basic',
+        iconUrl: browser.runtime.getURL('icons/icon.svg'),
+        title: 'Tab Sorter',
+        message
+      }).catch(() => {});
+    };
     try {
       await strategies.similarity.execute(
         await browser.tabs.query({ currentWindow: true }),
@@ -45,8 +46,10 @@ contextMenu.setSortCallback(async (info, tab) => {
         info.menuItemId === 'sort-similarity-group' ? 'group' : 'sort',
         0.5
       );
-    } catch (err) {
-      console.error('Similarity sort error:', err);
+    } catch (error) {
+      console.error('Similarity sort error:', error);
+    } finally {
+      browser.notifications.clear(SIMILARITY_PROGRESS_NOTIFICATION_ID).catch(() => {});
     }
   }
 });

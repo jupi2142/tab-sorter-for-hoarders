@@ -14,11 +14,6 @@ class SimilaritySortStrategy {
       throw new Error('Source tab not found');
     }
 
-    if (sourceTab.index !== 0) {
-      await browser.tabs.move(sourceTabId, { index: 0 });
-      sourceTab.index = 0;
-    }
-
     const sourceCleanTitle = this.titleCleaner.cleanTitle(sourceTab.title);
     if (!sourceCleanTitle) {
       throw new Error('Source tab has no valid title');
@@ -40,7 +35,11 @@ class SimilaritySortStrategy {
 
     const embeddingResults = await this.embeddingService.getEmbeddings(
       tabTitles,
-      (processed, total) => this.progressCallback(`Processing tabs... (${processed}/${total})`)
+      (processed, total) => this.progressCallback(
+        typeof processed === 'string'
+          ? processed
+          : `Processing tabs... (${processed}/${total})`
+      )
     );
 
     const embeddingMap = new Map();
@@ -51,6 +50,11 @@ class SimilaritySortStrategy {
     const sourceEmbedding = embeddingMap.get(sourceCleanTitle);
     if (!sourceEmbedding) {
       throw new Error('Failed to get source embedding');
+    }
+
+    if (sourceTab.index !== 0) {
+      await browser.tabs.move(sourceTabId, { index: 0 });
+      sourceTab.index = 0;
     }
 
     const tabEmbeddings = [];

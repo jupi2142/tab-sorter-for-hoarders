@@ -19,8 +19,6 @@ class MessageHandler {
         return this.handleSort('subdomain');
       case 'sortBySimilarity':
         return this.handleSimilaritySort(message, sender);
-      case 'checkApiKey':
-        return this.handleCheckApiKey();
       default:
         return { success: false, error: 'Unknown action' };
     }
@@ -58,11 +56,6 @@ class MessageHandler {
       return { success: false, error: err.message };
     }
   }
-
-  async handleCheckApiKey() {
-    const hasKey = await this.strategies.storage.hasApiKey();
-    return { success: true, hasKey };
-  }
 }
 
 class ContextMenuManager {
@@ -94,7 +87,7 @@ class ContextMenuManager {
       if (info.menuItemId === 'close-all' || info.menuItemId === 'close-others') {
         await this.handleCloseTabs(info, tab);
       } else if (this.onSortCallback) {
-        this.onSortCallback(info, tab);
+        return this.onSortCallback(info, tab);
       }
     });
   }

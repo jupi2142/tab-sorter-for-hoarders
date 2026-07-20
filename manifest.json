@@ -8,19 +8,17 @@
     },
     "action": {
         "default_icon": "icons/icon.svg",
-        "default_title": "Sort Tabs",
-        "default_popup": "popup.html"
+        "default_title": "Sort Tabs"
     },
     "background": {
         "scripts": ["dist/background.js"]
     },
-    "options_page": "settings.html",
     "permissions": [
         "tabs",
         "contextMenus",
-        "storage"
+        "notifications"
     ],
     "content_security_policy": {
-        "extension_pages": "script-src 'self'; object-src 'self'; connect-src https://generativelanguage.googleapis.com;"
+        "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
     }
 }

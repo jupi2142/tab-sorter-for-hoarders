@@ -3,12 +3,11 @@ const fs = require('fs');
 const path = require('path');
 
 const distDir = path.join(__dirname, 'dist');
-if (!fs.existsSync(distDir)) {
-  fs.mkdirSync(distDir, { recursive: true });
-}
 
 async function build() {
   const isWatch = process.argv.includes('--watch');
+  fs.rmSync(distDir, { recursive: true, force: true });
+  fs.mkdirSync(distDir, { recursive: true });
 
   const ctx = await esbuild.context({
     entryPoints: ['src/background.js'],
@@ -30,10 +29,13 @@ async function build() {
   } else {
     await ctx.rebuild();
     await ctx.dispose();
-    console.log('Build complete');
   }
 
-  fs.copyFileSync('settings.js', 'dist/settings.js');
+  await import('./scripts/prepare-local-model.mjs');
+
+  if (!isWatch) {
+    console.log('Build complete');
+  }
 }
 
 build().catch((err) => {
