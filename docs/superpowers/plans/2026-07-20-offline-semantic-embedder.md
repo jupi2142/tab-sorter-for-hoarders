@@ -6,7 +6,7 @@
 
 **Architecture:** `SimilaritySortStrategy` keeps its existing `getEmbeddings(texts, progressCallback)` dependency. A new local-only embedding service lazy-loads a quantized `all-MiniLM-L6-v2` model from extension-packaged assets through Transformers.js and the WASM CPU backend. Build tooling copies the model and ONNX Runtime WASM assets into `dist/`; UI and storage paths used solely for Gemini are removed.
 
-**Tech Stack:** Firefox MV3 WebExtensions, ES modules, esbuild, `@huggingface/transformers`, ONNX Runtime Web/WASM, Vitest.
+**Tech Stack:** Firefox MV3 WebExtensions, ES modules, esbuild, `@huggingface/transformers@3.8.1`, ONNX Runtime Web/WASM, Vitest.
 
 ---
 
@@ -20,7 +20,7 @@
 | `src/infrastructure/storage.js` | Deleted: storage is unnecessary once settings and persistent vectors are removed. |
 | `src/infrastructure/messages.js` | Delete the API-key check message; retain progress forwarding and sorting messages. |
 | `assets/models/Xenova/all-MiniLM-L6-v2/` | Versioned model config, tokenizer, and quantized ONNX model files. |
-| `assets/wasm/` | Copied ONNX Runtime Web `.wasm` files used by the local model. |
+| `assets/wasm/` | Copied ONNX Runtime Web `ort-wasm-simd-threaded.mjs` loader and matching `.wasm` binary used by the local model. |
 | `scripts/prepare-local-model.mjs` | Deterministically copies model and WASM assets into `dist/`. |
 | `build.js` | Calls the asset-preparation script after bundling. |
 | `manifest.json` | Remove network CSP and options/popup configuration. |
@@ -42,7 +42,7 @@
 Run:
 
 ```bash
-npm install @huggingface/transformers@3
+npm install @huggingface/transformers@3.8.1
 npm install --save-dev vitest@3
 ```
 
@@ -135,10 +135,12 @@ if (!existsSync(path.join(modelSource, 'Xenova/all-MiniLM-L6-v2/onnx/model_quant
 
 await cp(modelSource, modelTarget, { recursive: true });
 await mkdir(wasmTarget, { recursive: true });
-for (const file of await readdir(wasmSource)) {
-  if (file.endsWith('.wasm')) {
-    await cp(path.join(wasmSource, file), path.join(wasmTarget, file));
+for (const file of ['ort-wasm-simd-threaded.mjs', 'ort-wasm-simd-threaded.wasm']) {
+  const source = path.join(wasmSource, file);
+  if (!existsSync(source)) {
+    throw new Error(`Missing ONNX Runtime asset: ${source}`);
   }
+  await cp(source, path.join(wasmTarget, file));
 }
 ```
 
@@ -203,6 +205,14 @@ import { env, pipeline } from '@huggingface/transformers';
 
 const MODEL_ID = 'Xenova/all-MiniLM-L6-v2';
 
+export function configureLocalRuntime(getExtensionUrl) {
+  env.allowRemoteModels = false;
+  env.allowLocalModels = true;
+  env.localModelPath = getExtensionUrl('models/');
+  env.backends.onnx.wasm.wasmPaths = getExtensionUrl('wasm/');
+  env.backends.onnx.wasm.numThreads = 1;
+}
+
 function normalize(values) {
   const magnitude = Math.hypot(...values);
   if (!magnitude) throw new Error('Offline semantic model returned an empty embedding');
@@ -210,8 +220,13 @@ function normalize(values) {
 }
 
 export class LocalEmbeddingService {
-  constructor({ createExtractor = pipeline, getExtensionUrl = browser.runtime.getURL.bind(browser.runtime) } = {}) {
+  constructor({
+    createExtractor = pipeline,
+    configureRuntime = configureLocalRuntime,
+    getExtensionUrl = browser.runtime.getURL.bind(browser.runtime)
+  } = {}) {
     this.createExtractor = createExtractor;
+    this.configureRuntime = configureRuntime;
     this.getExtensionUrl = getExtensionUrl;
     this.extractorPromise = null;
     this.cache = new Map();
@@ -219,10 +234,7 @@ export class LocalEmbeddingService {
 
   async getExtractor() {
     if (!this.extractorPromise) {
-      env.allowRemoteModels = false;
-      env.allowLocalModels = true;
-      env.localModelPath = this.getExtensionUrl('models/');
-      env.backends.onnx.wasm.wasmPaths = this.getExtensionUrl('wasm/');
+      this.configureRuntime(this.getExtensionUrl);
       this.extractorPromise = this.createExtractor('feature-extraction', MODEL_ID, {
         dtype: 'q8',
         local_files_only: true,
@@ -412,7 +424,10 @@ import { describe, expect, it } from 'vitest';
 describe('offline build artifacts', () => {
   it('ships model and WASM assets without Gemini configuration', () => {
     expect(existsSync('dist/models/Xenova/all-MiniLM-L6-v2/onnx/model_quantized.onnx')).toBe(true);
-    expect(readdirSync('dist/wasm').some(file => file.endsWith('.wasm'))).toBe(true);
+    expect(readdirSync('dist/wasm')).toEqual(expect.arrayContaining([
+      'ort-wasm-simd-threaded.mjs',
+      'ort-wasm-simd-threaded.wasm'
+    ]));
     const manifest = readFileSync('manifest.json', 'utf8');
     const background = readFileSync('dist/background.js', 'utf8');
     expect(manifest).not.toContain('generativelanguage.googleapis.com');
