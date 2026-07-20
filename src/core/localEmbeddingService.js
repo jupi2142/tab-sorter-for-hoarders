@@ -42,8 +42,8 @@ export class LocalEmbeddingService {
       this.configureRuntime({
         allowRemoteModels: false,
         allowLocalModels: true,
-        localModelPath: this.getExtensionUrl('models/'),
-        wasmPath: this.getExtensionUrl('wasm/'),
+        localModelPath: this.getExtensionUrl('dist/models/'),
+        wasmPath: this.getExtensionUrl('dist/wasm/'),
         numThreads: 1
       });
       this.extractorPromise = this.createExtractor('feature-extraction', MODEL_ID, {

@@ -57,8 +57,8 @@ describe('LocalEmbeddingService', () => {
     expect(configureRuntime).toHaveBeenCalledWith({
       allowRemoteModels: false,
       allowLocalModels: true,
-      localModelPath: 'moz-extension://test/models/',
-      wasmPath: 'moz-extension://test/wasm/',
+      localModelPath: 'moz-extension://test/dist/models/',
+      wasmPath: 'moz-extension://test/dist/wasm/',
       numThreads: 1
     });
     expect(createExtractor).toHaveBeenCalledWith(
