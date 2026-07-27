@@ -3,6 +3,7 @@ class SimilaritySortStrategy {
     this.embeddingService = config.embeddingService;
     this.similarityCalculator = config.similarityCalculator;
     this.titleCleaner = config.titleCleaner;
+    this.contentExtractor = config.contentExtractor || { getTabMarkdown: async () => '' };
     this.progressCallback = config.progressCallback || (() => {});
   }
 
@@ -19,9 +20,12 @@ class SimilaritySortStrategy {
       throw new Error('Source tab has no valid title');
     }
 
-    const tabTitles = [sourceCleanTitle];
-    const tabMap = new Map();
-    tabMap.set(sourceCleanTitle, { tab: sourceTab, isSource: true });
+    const tabRecords = [{
+      tab: sourceTab,
+      isSource: true,
+      cleanTitle: sourceCleanTitle,
+      embeddingText: await this.getEmbeddingText(sourceTab, sourceCleanTitle)
+    }];
 
     for (const tab of tabsAll) {
       if (tab.id === sourceTabId) continue;
@@ -29,12 +33,16 @@ class SimilaritySortStrategy {
       const cleanTitleText = this.titleCleaner.cleanTitle(tab.title);
       if (!cleanTitleText) continue;
       
-      tabTitles.push(cleanTitleText);
-      tabMap.set(cleanTitleText, { tab, isSource: false });
+      tabRecords.push({
+        tab,
+        isSource: false,
+        cleanTitle: cleanTitleText,
+        embeddingText: await this.getEmbeddingText(tab, cleanTitleText)
+      });
     }
 
     const embeddingResults = await this.embeddingService.getEmbeddings(
-      tabTitles,
+      tabRecords.map(record => record.embeddingText),
       (processed, total) => this.progressCallback(
         typeof processed === 'string'
           ? processed
@@ -47,7 +55,7 @@ class SimilaritySortStrategy {
       embeddingMap.set(result.text, result.embedding);
     }
 
-    const sourceEmbedding = embeddingMap.get(sourceCleanTitle);
+    const sourceEmbedding = embeddingMap.get(tabRecords[0].embeddingText);
     if (!sourceEmbedding) {
       throw new Error('Failed to get source embedding');
     }
@@ -59,16 +67,16 @@ class SimilaritySortStrategy {
 
     const tabEmbeddings = [];
 
-    for (const [text, data] of tabMap) {
-      if (data.isSource) continue;
+    for (const record of tabRecords) {
+      if (record.isSource) continue;
 
-      const embedding = embeddingMap.get(text);
+      const embedding = embeddingMap.get(record.embeddingText);
       if (!embedding) continue;
 
       const similarity = this.similarityCalculator(sourceEmbedding, embedding);
       
       tabEmbeddings.push({
-        tab: data.tab,
+        tab: record.tab,
         similarity,
         isSimilar: similarity >= threshold
       });
@@ -119,6 +127,11 @@ class SimilaritySortStrategy {
     }
 
     return movedCount;
+  }
+
+  async getEmbeddingText(tab, cleanTitle) {
+    const markdown = await this.contentExtractor.getTabMarkdown(tab);
+    return markdown || cleanTitle;
   }
 }
 

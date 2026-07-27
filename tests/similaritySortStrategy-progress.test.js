@@ -52,4 +52,39 @@ describe('SimilaritySortStrategy progress', () => {
 
     expect(browser.tabs.move).not.toHaveBeenCalled();
   });
+
+  it('embeds reader markdown content instead of hostnames when content is available', async () => {
+    globalThis.browser = {
+      tabs: {
+        query: vi.fn().mockResolvedValue([
+          { id: 1, index: 0, title: 'Source tab', url: 'https://source.example/path' },
+          { id: 2, index: 1, title: 'Related tab', url: 'https://related.example/path' }
+        ]),
+        move: vi.fn()
+      }
+    };
+    const embeddedTexts = [];
+    const strategy = new SimilaritySortStrategy({
+      embeddingService: {
+        getEmbeddings: async (texts) => {
+          embeddedTexts.push(...texts);
+          return texts.map((text, index) => ({ text, embedding: [index + 1, 1] }));
+        }
+      },
+      contentExtractor: {
+        getTabMarkdown: vi.fn(async tab => `# ${tab.title}\n\nImportant article body for tab ${tab.id}`)
+      },
+      similarityCalculator: () => 1,
+      titleCleaner: { cleanTitle: title => title }
+    });
+
+    await strategy.execute([], 1, 'group', 0.5);
+
+    expect(embeddedTexts).toEqual([
+      '# Source tab\n\nImportant article body for tab 1',
+      '# Related tab\n\nImportant article body for tab 2'
+    ]);
+    expect(embeddedTexts.join('\n')).not.toContain('source.example');
+    expect(embeddedTexts.join('\n')).not.toContain('related.example');
+  });
 });
