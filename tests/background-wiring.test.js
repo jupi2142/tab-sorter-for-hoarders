@@ -108,4 +108,11 @@ describe('background local similarity wiring', () => {
     expect(manifest.content_security_policy.extension_pages)
       .toBe("script-src 'self' 'wasm-unsafe-eval'; object-src 'self';");
   });
+
+  it('declares scripting access for reader-style tab content extraction', () => {
+    const manifest = JSON.parse(readFileSync('manifest.json', 'utf8'));
+
+    expect(manifest.permissions).toContain('scripting');
+    expect(manifest.host_permissions).toContain('<all_urls>');
+  });
 });

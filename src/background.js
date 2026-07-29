@@ -6,10 +6,12 @@ import { DomainSortStrategy } from './strategies/domainSortStrategy.js';
 import { SubdomainSortStrategy } from './strategies/subdomainSortStrategy.js';
 import { SimilaritySortStrategy } from './strategies/similaritySortStrategy.js';
 import { MessageHandler, ContextMenuManager } from './infrastructure/messages.js';
+import { TabContentExtractor } from './infrastructure/tabContentExtractor.js';
 
 const urlParser = { getHostname, getDomainKey, getSubdomainKey };
 const SIMILARITY_PROGRESS_NOTIFICATION_ID = 'similarity-sort-progress';
 const embeddingService = new LocalEmbeddingService();
+const contentExtractor = new TabContentExtractor();
 
 const strategies = {
   domain: new DomainSortStrategy(urlParser),
@@ -17,7 +19,8 @@ const strategies = {
   similarity: new SimilaritySortStrategy({
     embeddingService,
     similarityCalculator: cosineSimilarity,
-    titleCleaner: { cleanTitle }
+    titleCleaner: { cleanTitle },
+    contentExtractor
   })
 };
 
